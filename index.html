@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0620">
+<title>Light a Diya · Happy Diwali</title>
+<meta name="description" content="Someone sent you a Diwali wish. Tap the diya to light it.">
+
+<!-- Link preview for WhatsApp / social apps -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="🪔 A Diwali surprise for you">
+<meta property="og:description" content="Tap the diya to light it and open your Diwali wish.">
+<meta property="og:image" content="https://dasmraja.github.io/diwali/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪔</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500&family=Tiro+Devanagari+Hindi&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --gold: #ffcf5a;
+    --marigold: #ff9f1c;
+    --rose: #ff4f8b;
+    --ink: #0b0620;
+    --glass: rgba(20, 10, 45, .72);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--ink); overflow: hidden; }
+  body {
+    font-family: Poppins, system-ui, sans-serif;
+    color: #fff;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+
+  /* ---------- intro ---------- */
+  #intro {
+    position: fixed; left: 0; right: 0; top: 16vh;
+    text-align: center; padding: 0 20px; pointer-events: none;
+    transition: opacity .8s ease, transform .8s ease;
+  }
+  #intro .sender { font-size: clamp(15px, 4vw, 19px); color: #e9dcff; opacity: .9; letter-spacing: .02em; }
+  #intro .sender b { color: var(--gold); font-weight: 600; }
+  #intro .cta {
+    margin-top: 14px; font-family: "Cormorant Garamond", serif; font-style: italic;
+    font-size: clamp(26px, 7vw, 40px); color: #fff;
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+  #intro .hint { margin-top: 10px; font-size: 13px; color: #b9a8e6; opacity: .8; }
+  #intro.gone { opacity: 0; transform: translateY(-20px); }
+  @keyframes breathe { 0%,100% { opacity: .55; } 50% { opacity: 1; text-shadow: 0 0 18px rgba(255,190,90,.7); } }
+
+  /* ---------- greeting ---------- */
+  #greeting {
+    position: fixed; left: 0; right: 0; top: 7vh;
+    text-align: center; padding: 0 18px; pointer-events: none;
+  }
+  #greeting > * { opacity: 0; transform: translateY(14px); transition: opacity 1.2s ease, transform 1.2s ease; }
+  #greeting.show > * { opacity: 1; transform: none; }
+  #greeting.show > :nth-child(2) { transition-delay: .5s; }
+  #greeting.show > :nth-child(3) { transition-delay: 1.1s; }
+  #greeting.show > :nth-child(4) { transition-delay: 1.8s; }
+  .hindi {
+    font-family: "Tiro Devanagari Hindi", serif;
+    font-size: clamp(34px, 10vw, 64px); line-height: 1.25;
+    background: linear-gradient(180deg, #fff3c4 10%, var(--gold) 50%, var(--marigold) 95%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 14px rgba(255,170,60,.55));
+  }
+  .title {
+    font-family: "Cormorant Garamond", serif; font-weight: 700;
+    font-size: clamp(22px, 6vw, 38px); letter-spacing: .03em; margin-top: 2px;
+    text-shadow: 0 0 16px rgba(255,120,180,.55);
+  }
+  .title .to { color: #ffd6e7; }
+  .wish {
+    font-family: "Cormorant Garamond", serif; font-style: italic;
+    font-size: clamp(16px, 4.4vw, 22px); color: #f3e9ff; max-width: 560px; margin: 10px auto 0; line-height: 1.4;
+  }
+  .from { margin-top: 10px; font-size: clamp(13px, 3.6vw, 16px); color: var(--gold); letter-spacing: .04em; }
+  .from:empty { display: none; }
+
+  /* ---------- action bar ---------- */
+  #actions {
+    position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom));
+    transform: translate(-50%, 30px); opacity: 0; pointer-events: none;
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; width: min(560px, calc(100% - 24px));
+    transition: opacity .8s ease, transform .8s ease;
+  }
+  #actions.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .btn {
+    border: 0; border-radius: 999px; cursor: pointer; font: 600 14px Poppins, system-ui, sans-serif;
+    padding: 11px 16px; color: #fff; background: var(--glass);
+    border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .btn:active { transform: scale(.96); }
+  .btn.wa { background: #1fa855; border-color: #2fd06b; box-shadow: 0 6px 24px rgba(31,168,85,.45); }
+  .btn.primary { background: linear-gradient(135deg, var(--marigold), var(--rose)); border-color: transparent; }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  @media (max-width: 480px) {
+    #actions { flex-wrap: nowrap; gap: 6px; }
+    #actions .btn { font-size: 13px; padding: 10px 12px; gap: 5px; }
+    #replayBtn .lbl { display: none; }
+  }
+
+  #sound {
+    position: fixed; top: max(12px, env(safe-area-inset-top)); right: 12px;
+    width: 40px; height: 40px; padding: 0; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .6s;
+  }
+  #sound.show { opacity: .85; pointer-events: auto; }
+
+  /* ---------- create modal ---------- */
+  #modal {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(5, 2, 15, .6); padding: 16px; z-index: 10;
+  }
+  #modal.open { display: flex; }
+  .card {
+    width: min(420px, 100%); background: linear-gradient(160deg, #241245, #120828);
+    border: 1px solid rgba(255,207,90,.3); border-radius: 20px; padding: 22px 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 40px rgba(255,159,28,.15);
+    user-select: text; -webkit-user-select: text;
+  }
+  .card h2 { font-family: "Cormorant Garamond", serif; font-size: 28px; color: var(--gold); }
+  .card p.sub { font-size: 13px; color: #c8b9ee; margin: 4px 0 16px; }
+  .card label { display: block; font-size: 12px; color: #d8cbff; margin: 12px 0 5px; letter-spacing: .03em; }
+  .card input, .card textarea {
+    width: 100%; font: 15px Poppins, system-ui, sans-serif; color: #fff;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 12px; padding: 11px 12px; outline: none;
+  }
+  .card textarea { resize: none; height: 70px; }
+  .card input:focus, .card textarea:focus { border-color: var(--gold); }
+  .card .row { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+  .card .row .btn { flex: 1; justify-content: center; }
+  #copied { font-size: 12px; color: #9ef0b8; height: 16px; margin-top: 8px; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Animated Diwali greeting with diyas, rangoli, lanterns and fireworks" role="img"></canvas>
+
+<div id="intro">
+  <div class="sender" id="introSender">A Diwali surprise is waiting for you</div>
+  <div class="cta">Tap the diya to light it</div>
+  <div class="hint">✨ turn your sound on</div>
+</div>
+
+<div id="greeting" aria-live="polite">
+  <div class="hindi">शुभ दीपावली</div>
+  <div class="title">Happy Diwali<span class="to" id="toName"></span></div>
+  <div class="wish" id="wish">May a thousand diyas light your path, and every day of the year sparkle with joy, health and prosperity.</div>
+  <div class="from" id="fromName"></div>
+</div>
+
+<button class="btn" id="sound" aria-label="Toggle sound">🔊</button>
+
+<div id="actions">
+  <button class="btn wa" id="shareBtn">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.4-.5c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.1-.3-.2-.6-.3zM12 21.8c-1.8 0-3.5-.5-5-1.4l-.4-.2-3.7 1 1-3.6-.2-.4C2.7 15.6 2.2 13.8 2.2 12 2.2 6.6 6.6 2.2 12 2.2c2.6 0 5.1 1 6.9 2.9 1.8 1.8 2.9 4.3 2.9 6.9 0 5.4-4.4 9.8-9.8 9.8zM20.5 3.5C18.2 1.2 15.2 0 12 0 5.4 0 .1 5.3.1 11.9c0 2.1.6 4.1 1.6 5.9L0 24l6.3-1.7c1.7.9 3.7 1.4 5.7 1.4 6.6 0 11.9-5.3 11.9-11.9 0-3.2-1.2-6.2-3.4-8.3z"/></svg>
+    Send to someone
+  </button>
+  <button class="btn primary" id="createBtn">✍️ Personalise</button>
+  <button class="btn" id="replayBtn" aria-label="Replay">↻<span class="lbl"> Replay</span></button>
+</div>
+
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <form class="card" id="form" autocomplete="off">
+    <h2 id="mTitle">Send your own diya 🪔</h2>
+    <p class="sub">Add names and a wish. We'll make a link that opens this greeting for them on WhatsApp.</p>
+    <label for="fFrom">Your name</label>
+    <input id="fFrom" maxlength="40" placeholder="e.g. Priya & family">
+    <label for="fTo">Their name (optional)</label>
+    <input id="fTo" maxlength="40" placeholder="e.g. Rohan">
+    <label for="fMsg">Your wish (optional)</label>
+    <textarea id="fMsg" maxlength="160" placeholder="May a thousand diyas light your path…"></textarea>
+    <div class="row">
+      <button type="submit" class="btn wa">Share on WhatsApp</button>
+      <button type="button" class="btn" id="copyBtn">Copy link</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button type="button" class="btn" id="previewBtn">Preview</button>
+      <button type="button" class="btn" id="closeBtn">Close</button>
+    </div>
+    <div id="copied"></div>
+  </form>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ================= personalisation ================= */
+  const params = new URLSearchParams(location.search);
+  const clean = (s, n) => (s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
+  const P = {
+    from: clean(params.get('from'), 40),
+    to: clean(params.get('to'), 40),
+    msg: clean(params.get('msg'), 160),
+  };
+  const $ = id => document.getElementById(id);
+  if (P.from) {
+    const s = $('introSender');
+    s.textContent = '';
+    const b = document.createElement('b'); b.textContent = P.from;
+    s.append(b, ' sent you a Diwali wish');
+  }
+  if (P.to) $('toName').textContent = ', ' + P.to;
+  if (P.msg) $('wish').textContent = P.msg;
+  if (P.from) $('fromName').textContent = '— with love, ' + P.from;
+  $('fFrom').value = P.to || '';   // the receiver is likely the next sender
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ================= canvas ================= */
+  const cvs = $('c'), ctx = cvs.getContext('2d');
+  let W = 0, H = 0, DPR = 1, small = false;
+  let stars = [], diyas = [], center = { x: 0, y: 0, R: 0 };
+
+  function layout() {
+    small = W < 640;
+    const n = small ? 5 : 7;
+    const y = H * (small ? 0.8 : 0.85);
+    const gap = Math.min(W / (n + 0.6), 150);
+    const mid = (n - 1) / 2;
+    const old = diyas;
+    diyas = [];
+    for (let i = 0; i < n; i++) {
+      const k = Math.abs(i - mid);
+      diyas.push({
+        x: W / 2 + (i - mid) * gap,
+        y: y - (mid - k) * (small ? 3 : 5),     // gentle arc
+        s: (small ? 0.8 : 1) * (1 - k * 0.04),
+        k, lit: old[i] ? old[i].lit : 0, seed: Math.random() * 100,
+      });
+    }
+    // fit the rangoli between the greeting text and the row of diyas
+    const top = $('greeting').getBoundingClientRect().bottom + 8;
+    const bottom = y - 60 * (small ? 0.8 : 1);
+    center.x = W / 2;
+    center.y = (top + bottom) / 2;
+    center.R = Math.max(40, Math.min(W * 0.44, (bottom - top) / 2 * 0.9));
+  }
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cvs.width = Math.round(W * DPR); cvs.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!stars.length) {
+      for (let i = 0; i < 160; i++) stars.push({ x: Math.random(), y: Math.random() * 0.75, r: Math.random() * 1.3 + 0.2, t: Math.random() * 6 });
+    }
+    layout();
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  /* ================= helpers ================= */
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const easeBack = t => { const c = 1.70158; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = a => a[(Math.random() * a.length) | 0];
+  const PALETTES = [
+    ['#ffcf5a', '#ff9f1c', '#fff1b8'],
+    ['#ff4f8b', '#ff9fc4', '#ffe0ee'],
+    ['#4fe3c1', '#a8fff0', '#ffffff'],
+    ['#b48cff', '#e2d1ff', '#ffcf5a'],
+    ['#ff6a3d', '#ffcf5a', '#ffffff'],
+    ['#7fd7ff', '#ffffff', '#ff9fc4'],
+  ];
+
+  /* ================= audio (tiny synth, no files) ================= */
+  let AC = null, muted = false;
+  const NOTES = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66];
+  function audio() {
+    if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (AC && AC.state === 'suspended') AC.resume();
+    return AC;
+  }
+  function bell(freq, when = 0, vol = 0.18) {
+    if (muted || !audio()) return;
+    const t = AC.currentTime + when;
+    [1, 2.01, 3.02].forEach((m, i) => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = 'sine'; o.frequency.value = freq * m;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol / (i * 2 + 1), t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2 / (i + 1));
+      o.connect(g).connect(AC.destination); o.start(t); o.stop(t + 2.5);
+    });
+  }
+  function pop(vol = 0.25) {
+    if (muted || !audio()) return;
+    const t = AC.currentTime, len = 0.6;
+    const buf = AC.createBuffer(1, AC.sampleRate * len, AC.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    const src = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+    src.buffer = buf; f.type = 'lowpass'; f.frequency.value = rand(700, 1600);
+    g.gain.value = vol;
+    src.connect(f).connect(g).connect(AC.destination); src.start(t);
+  }
+  function whoosh() {
+    if (muted || !audio()) return;
+    const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(1400, t + 0.7);
+    g.gain.setValueAtTime(0.025, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + 0.85);
+  }
+
+  /* ================= state / timeline ================= */
+  let started = false, T0 = 0, now = 0, warmth = 0;
+  let spark = null;                      // the first falling spark
+  const lanterns = [], rockets = [], parts = [];
+  let nextLantern = 0, nextRocket = 0, greetShown = false, actionsShown = false;
+  const TL = { spread: 0.75, step: 0.32 };
+  const rangoliStart = () => TL.spread + TL.step * (diyas.length / 2 + 0.5) + 0.2;
+
+  function start(x, y) {
+    if (started) return;
+    started = true; T0 = now;
+    $('intro').classList.add('gone');
+    $('sound').classList.add('show');
+    audio();
+    const d0 = diyas[(diyas.length - 1) / 2];
+    spark = { x0: x, y0: y, x1: d0.x, y1: d0.y - 26 * d0.s, t: 0 };
+    whoosh();
+  }
+
+  function reset() {
+    started = false; spark = null; warmth = 0; greetShown = false; actionsShown = false;
+    lanterns.length = rockets.length = parts.length = 0;
+    diyas.forEach(d => { d.lit = 0; d.chimed = false; });
+    $('greeting').classList.remove('show');
+    $('actions').classList.remove('show');
+    $('intro').classList.remove('gone');
+  }
+
+  /* ================= drawing: sky ================= */
+  function drawSky(time) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    const w = warmth;
+    g.addColorStop(0, `rgb(${8 + 10 * w},${5 + 3 * w},${28 + 14 * w})`);
+    g.addColorStop(0.6, `rgb(${22 + 40 * w},${10 + 12 * w},${52 + 10 * w})`);
+    g.addColorStop(1, `rgb(${40 + 70 * w},${16 + 30 * w},${40})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // moonless sky: stars
+    for (const s of stars) {
+      const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(time * 1.6 + s.t * 7));
+      ctx.globalAlpha = a * (1 - w * 0.35);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(s.x * W, s.y * H, s.r, s.r);
+    }
+    ctx.globalAlpha = 1;
+
+    // ground silhouette with a soft parapet line
+    const gy = H * (small ? 0.9 : 0.89);
+    const gg = ctx.createLinearGradient(0, gy - 20, 0, H);
+    gg.addColorStop(0, 'rgba(10,4,20,0)');
+    gg.addColorStop(0.25, '#140824');
+    gg.addColorStop(1, '#07030f');
+    ctx.fillStyle = gg; ctx.fillRect(0, gy - 20, W, H - gy + 20);
+  }
+
+  /* ================= drawing: diya ================= */
+  function flameShape(h, w, sway) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(w, -h * 0.25, w * 0.6 + sway * 0.4, -h * 0.7, sway, -h);
+    ctx.bezierCurveTo(-w * 0.6 + sway * 0.4, -h * 0.7, -w, -h * 0.25, 0, 0);
+    ctx.closePath();
+  }
+
+  function drawDiya(d, time) {
+    const { x, y, s, lit } = d;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+
+    // glow on the ground / around
+    if (lit > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      const flick = 0.85 + 0.15 * Math.sin(time * 13 + d.seed) * Math.sin(time * 7.3 + d.seed * 2);
+      const r = 150 * lit * flick;
+      const gl = ctx.createRadialGradient(0, -30, 0, 0, -30, r);
+      gl.addColorStop(0, `rgba(255,170,60,${0.45 * lit})`);
+      gl.addColorStop(0.4, `rgba(255,110,40,${0.16 * lit})`);
+      gl.addColorStop(1, 'rgba(255,80,20,0)');
+      ctx.fillStyle = gl; ctx.fillRect(-r, -30 - r, r * 2, r * 2);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // clay bowl
+    const bowl = ctx.createLinearGradient(0, -14, 0, 22);
+    bowl.addColorStop(0, '#d9733a');
+    bowl.addColorStop(0.5, '#a8441d');
+    bowl.addColorStop(1, '#5a1f0e');
+    ctx.fillStyle = bowl;
+    ctx.beginPath();
+    ctx.moveTo(-44, -10);
+    ctx.quadraticCurveTo(-40, 22, 0, 24);
+    ctx.quadraticCurveTo(40, 22, 44, -10);
+    ctx.quadraticCurveTo(52, -16, 56, -22);       // spout
+    ctx.quadraticCurveTo(40, -12, 30, -12);
+    ctx.lineTo(-44, -12);
+    ctx.closePath();
+    ctx.fill();
+
+    // rim (oil)
+    ctx.fillStyle = '#3a1407';
+    ctx.beginPath(); ctx.ellipse(-4, -11, 40, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = lit > 0 ? `rgba(255,190,90,${0.35 * lit})` : 'rgba(120,60,20,.4)';
+    ctx.beginPath(); ctx.ellipse(-4, -11, 34, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // painted pattern: dots + band
+    ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-38, 2); ctx.quadraticCurveTo(0, 12, 38, 2); ctx.stroke();
+    ctx.fillStyle = '#fff2c8';
+    for (let i = -3; i <= 3; i++) {
+      ctx.beginPath(); ctx.arc(i * 10, 8 + (1 - Math.abs(i) / 3) * 2, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = '#ff4f8b';
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath(); ctx.arc(i * 13, 14.5 - Math.abs(i) * 1.5, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // wick
+    ctx.strokeStyle = '#2a1206'; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(46, -18); ctx.lineTo(50, -24); ctx.stroke();
+
+    // flame
+    if (lit > 0) {
+      const sway = Math.sin(time * 5 + d.seed) * 3 + Math.sin(time * 11.7 + d.seed) * 1.5;
+      const h = (40 + Math.sin(time * 17 + d.seed) * 3) * easeBack(clamp(lit));
+      ctx.translate(50, -24);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.save(); ctx.scale(1.5, 1.25);
+      flameShape(h, 11, sway);
+      ctx.fillStyle = 'rgba(255,90,20,0.35)'; ctx.fill();
+      ctx.restore();
+      flameShape(h, 9, sway);
+      const fg = ctx.createLinearGradient(0, 0, 0, -h);
+      fg.addColorStop(0, 'rgba(255,120,30,.95)');
+      fg.addColorStop(0.35, 'rgba(255,200,80,.95)');
+      fg.addColorStop(1, 'rgba(255,240,180,.0)');
+      ctx.fillStyle = fg; ctx.fill();
+      ctx.save(); ctx.scale(0.45, 0.5);
+      flameShape(h, 8, sway * 0.5);
+      ctx.fillStyle = 'rgba(255,255,240,.9)'; ctx.fill();
+      ctx.restore();
+      ctx.globalCompositeOperation = 'source-over';
+    } else if (!started && d.k === 0) {
+      // the waiting diya pulses a little hint ring
+      const p = (time % 2) / 2;
+      ctx.strokeStyle = `rgba(255,207,90,${0.6 * (1 - p)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(4, 0, 50 + p * 40, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* ================= drawing: rangoli mandala ================= */
+  function petal(len, wid) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(wid, len * 0.45, 0, len);
+    ctx.quadraticCurveTo(-wid, len * 0.45, 0, 0);
+    ctx.closePath();
+  }
+  function ring(n, rot, fn) {
+    for (let i = 0; i < n; i++) {
+      ctx.save(); ctx.rotate(rot + (i / n) * Math.PI * 2); fn(i); ctx.restore();
+    }
+  }
+
+  function drawRangoli(t, time) {
+    if (t <= 0) return;
+    const { x, y, R } = center;
+    ctx.save();
+    ctx.translate(x, y);
+
+    // halo behind
+    const halo = ctx.createRadialGradient(0, 0, R * 0.1, 0, 0, R * 1.35);
+    halo.addColorStop(0, `rgba(255,170,80,${0.22 * clamp(t)})`);
+    halo.addColorStop(0.6, `rgba(255,80,140,${0.08 * clamp(t)})`);
+    halo.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, R * 1.4, 0, Math.PI * 2); ctx.fill();
+
+    const L = i => clamp((t - i * 0.32) / 0.9);   // per-layer progress
+    const spin = time * 0.08;
+
+    // layer 6: outer scallops
+    let p = L(6);
+    if (p > 0) {
+      ctx.globalAlpha = p;
+      ring(36, -spin * 0.5, () => {
+        ctx.beginPath(); ctx.arc(0, R * 0.97 * easeOut(p), R * 0.06, 0, Math.PI);
+        ctx.strokeStyle = '#ff4f8b'; ctx.lineWidth = 2; ctx.stroke();
+      });
+      ring(36, -spin * 0.5 + Math.PI / 36, () => {
+        ctx.beginPath(); ctx.arc(0, R * 1.04 * easeOut(p), 2.4, 0, Math.PI * 2); ctx.fillStyle = '#fff1b8'; ctx.fill();
+      });
+    }
+    // layer 5: teardrops
+    p = L(5);
+    if (p > 0) {
+      ctx.globalAlpha = p;
+      ring(24, spin, i => {
+        ctx.translate(0, R * 0.7);
+        const s = easeBack(p);
+        petal(R * 0.2 * s, R * 0.06 * s);
+        ctx.fillStyle = i % 2 ? '#ff9f1c' : '#ffcf5a'; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, R * 0.12 * s, R * 0.018, 0, Math.PI * 2); ctx.fillStyle = '#7a1d4f'; ctx.fill();
+      });
+    }
+    // layer 4: big teal/violet petals
+    p = L(4);
+    if (p > 0) {
+      ctx.globalAlpha = p;
+      ring(12, -spin, () => {
+        ctx.translate(0, R * 0.36);
+        const s = easeBack(p);
+        petal(R * 0.32 * s, R * 0.14 * s); ctx.fillStyle = '#2bb3a0'; ctx.fill();
+        petal(R * 0.24 * s, R * 0.09 * s); ctx.fillStyle = '#b48cff'; ctx.fill();
+        petal(R * 0.15 * s, R * 0.045 * s); ctx.fillStyle = '#fff1b8'; ctx.fill();
+      });
+    }
+    // layer 3: dotted ring
+    p = L(3);
+    if (p > 0) {
+      ctx.globalAlpha = 1;
+      const n = 32, shown = Math.floor(n * p);
+      ring(shown, spin * 1.5, i => {
+        ctx.beginPath(); ctx.arc(0, R * 0.34, i % 2 ? 2.5 : 3.6, 0, Math.PI * 2);
+        ctx.fillStyle = i % 2 ? '#ffffff' : '#ffcf5a'; ctx.fill();
+      });
+    }
+    // layer 2: magenta petals
+    p = L(2);
+    if (p > 0) {
+      ctx.globalAlpha = p;
+      ring(8, spin * 0.7, () => {
+        ctx.translate(0, R * 0.08);
+        const s = easeBack(p);
+        petal(R * 0.24 * s, R * 0.11 * s); ctx.fillStyle = '#e8336f'; ctx.fill();
+        petal(R * 0.16 * s, R * 0.06 * s); ctx.fillStyle = '#ff9f1c'; ctx.fill();
+      });
+      ring(8, spin * 0.7 + Math.PI / 8, () => {
+        ctx.translate(0, R * 0.1);
+        petal(R * 0.13 * easeBack(p), R * 0.05); ctx.fillStyle = '#ffcf5a'; ctx.fill();
+      });
+    }
+    // layer 1: center
+    p = L(1);
+    if (p > 0) {
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.1 * easeBack(p), 0, Math.PI * 2); ctx.fillStyle = '#ffcf5a'; ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.055 * easeBack(p), 0, Math.PI * 2); ctx.fillStyle = '#e8336f'; ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.02 * easeBack(p), 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    }
+    // the light "drawing" the rangoli: a sparkle orbiting while layers bloom
+    if (t < 3.2) {
+      ctx.globalCompositeOperation = 'lighter';
+      const a = t * 5, rr = R * clamp(t / 3) * 1.0;
+      const sx = Math.cos(a) * rr, sy = Math.sin(a) * rr;
+      const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 18);
+      sg.addColorStop(0, 'rgba(255,255,220,1)'); sg.addColorStop(1, 'rgba(255,200,80,0)');
+      ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      if (Math.random() < 0.6) parts.push(mkPart(x + sx, y + sy, rand(-0.5, 0.5), rand(-0.5, 0.5), pick(['#ffcf5a', '#fff1b8', '#ff9fc4']), 0.9, 0.02, 0.97));
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /* ================= sky lanterns ================= */
+  function spawnLantern() {
+    const sc = rand(0.55, 1.1) * (small ? 0.75 : 1);
+    lanterns.push({ x: rand(W * 0.05, W * 0.95), y: H + 40, s: sc, v: rand(0.25, 0.5) * sc, ph: Math.random() * 6, born: now });
+  }
+  function drawLantern(l, time) {
+    const sway = Math.sin(time * 0.8 + l.ph) * 14 * l.s;
+    const x = l.x + sway, y = l.y;
+    ctx.save(); ctx.translate(x, y); ctx.scale(l.s, l.s);
+    ctx.rotate(Math.sin(time * 0.8 + l.ph) * 0.06);
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(0, 4, 0, 0, 4, 60);
+    g.addColorStop(0, 'rgba(255,160,60,.45)'); g.addColorStop(1, 'rgba(255,100,40,0)');
+    ctx.fillStyle = g; ctx.fillRect(-60, -56, 120, 120);
+    ctx.globalCompositeOperation = 'source-over';
+    const body = ctx.createLinearGradient(0, -24, 0, 22);
+    body.addColorStop(0, '#ffcf7a'); body.addColorStop(0.6, '#ff8a2a'); body.addColorStop(1, '#ff5a1c');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(-14, -24); ctx.quadraticCurveTo(0, -28, 14, -24);
+    ctx.lineTo(18, 18); ctx.quadraticCurveTo(0, 22, -18, 18);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(160,60,10,.5)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-5, -25); ctx.lineTo(-6, 20); ctx.moveTo(5, -25); ctx.lineTo(6, 20); ctx.stroke();
+    ctx.fillStyle = '#fff6d0';
+    ctx.beginPath(); ctx.ellipse(0, 16, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  /* ================= fireworks ================= */
+  function mkPart(x, y, vx, vy, c, life, g = 0.04, drag = 0.985, kind = 0) {
+    return { x, y, px: x, py: y, vx, vy, c, life, max: life, g, drag, kind };
+  }
+  const SHAPES = ['peony', 'ring', 'willow', 'double', 'crossette', 'diya'];
+  function launch(tx, ty, shape) {
+    const x = tx + rand(-40, 40);
+    rockets.push({
+      x, y: H * 0.95, px: x, py: H * 0.95, tx, ty,
+      vy: -Math.sqrt(2 * 0.12 * (H * 0.95 - ty)), vx: (tx - x) / 60,
+      shape: shape || pick(SHAPES), pal: pick(PALETTES),
+    });
+    whoosh();
+  }
+  function explode(r) {
+    const { x, y, pal, shape } = r;
+    const cap = small ? 0.65 : 1;
+    pop(0.18 + Math.random() * 0.1);
+    // flash
+    parts.push(mkPart(x, y, 0, 0, '#fff', 0.25, 0, 1, 2));
+    if (shape === 'ring' || shape === 'double') {
+      const rings = shape === 'double' ? [4.2, 2.4] : [4];
+      const tilt = rand(0, Math.PI), sq = rand(0.35, 1);
+      rings.forEach((sp, ri) => {
+        const n = Math.round(60 * cap);
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          let vx = Math.cos(a) * sp, vy = Math.sin(a) * sp * sq;
+          const c = Math.cos(tilt), s = Math.sin(tilt);
+          parts.push(mkPart(x, y, vx * c - vy * s, vx * s + vy * c, pal[ri % pal.length], rand(1.4, 1.8)));
+        }
+      });
+    } else if (shape === 'willow') {
+      const n = Math.round(90 * cap);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, sp = rand(1, 3.6);
+        parts.push(mkPart(x, y, Math.cos(a) * sp, Math.sin(a) * sp, '#ffcf5a', rand(2.2, 3), 0.03, 0.975, 1));
+      }
+    } else if (shape === 'diya') {
+      // a burst shaped like a flame / diya — this greeting's signature shell
+      const n = Math.round(80 * cap);
+      for (let i = 0; i < n; i++) {
+        const t = (i / n) * Math.PI * 2;
+        // teardrop parametric curve (flame)
+        const fx = Math.sin(t) * Math.pow(Math.sin(t / 2), 1.3);
+        const fy = -Math.cos(t);
+        parts.push(mkPart(x, y, fx * 4.2, fy * 4.6 - 1, i % 3 ? '#ffcf5a' : '#ff6a3d', 1.7, 0.025, 0.975));
+      }
+      for (let i = 0; i < n * 0.6; i++) {      // bowl
+        const t = Math.PI * (i / (n * 0.6));
+        parts.push(mkPart(x, y + 6, Math.cos(t) * 4.6, Math.sin(t) * 2.2 + 1.2, '#ff4f8b', 1.7, 0.025, 0.975));
+      }
+    } else {
+      const n = Math.round((shape === 'crossette' ? 40 : 110) * cap);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, sp = Math.pow(Math.random(), 0.45) * 4.6;
+        const p = mkPart(x, y, Math.cos(a) * sp, Math.sin(a) * sp, pick(pal), rand(1.2, 1.9));
+        if (shape === 'crossette') p.split = true;
+        parts.push(p);
+      }
+    }
+    warmth = Math.min(1, warmth + 0.05);
+  }
+
+  function updateFX(dt, f) {
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i];
+      r.px = r.x; r.py = r.y;
+      r.x += r.vx * f; r.y += r.vy * f; r.vy += 0.12 * f;
+      if (Math.random() < 0.8) parts.push(mkPart(r.x, r.y, rand(-0.3, 0.3), rand(0.5, 1.2), '#ffcf8a', 0.5, 0.02, 0.95));
+      if (r.vy >= -0.4) { explode(r); rockets.splice(i, 1); }
+    }
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.px = p.x; p.py = p.y;
+      p.vx *= Math.pow(p.drag, f); p.vy *= Math.pow(p.drag, f);
+      p.vy += p.g * f;
+      p.x += p.vx * f; p.y += p.vy * f;
+      p.life -= dt;
+      if (p.split && p.life < p.max * 0.45) {
+        p.split = false;
+        for (let k = 0; k < 4; k++) {
+          const a = k * Math.PI / 2 + Math.random();
+          parts.push(mkPart(p.x, p.y, Math.cos(a) * 2, Math.sin(a) * 2, '#ffffff', 0.7, 0.03, 0.97));
+        }
+      }
+      if (p.life <= 0) parts.splice(i, 1);
+    }
+    if (parts.length > 2200) parts.splice(0, parts.length - 2200);
+  }
+
+  function drawFX() {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (const r of rockets) {
+      ctx.strokeStyle = '#ffe2a8'; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.moveTo(r.px, r.py + 6); ctx.lineTo(r.x, r.y); ctx.stroke();
+    }
+    for (const p of parts) {
+      const a = clamp(p.life / p.max);
+      if (p.kind === 2) {        // flash
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 90);
+        g.addColorStop(0, `rgba(255,240,210,${0.55 * a})`); g.addColorStop(1, 'rgba(255,200,120,0)');
+        ctx.fillStyle = g; ctx.fillRect(p.x - 90, p.y - 90, 180, 180);
+        continue;
+      }
+      ctx.globalAlpha = p.kind === 1 ? a * a : a;
+      ctx.strokeStyle = p.c;
+      ctx.lineWidth = p.kind === 1 ? 1.4 : 2.2;
+      ctx.beginPath();
+      ctx.moveTo(p.px - (p.x - p.px) * 2, p.py - (p.y - p.py) * 2);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      // sparkle twinkle
+      if (a < 0.35 && Math.random() < 0.15) { ctx.fillStyle = '#fff'; ctx.fillRect(p.x, p.y, 1.6, 1.6); }
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /* ================= main loop ================= */
+  let last = performance.now();
+  function frame(ms) {
+    const dt = Math.min(0.05, (ms - last) / 1000); last = ms;
+    const f = dt * 60;
+    now += dt;
+    const time = now;
+    const t = started ? now - T0 : -1;
+
+    // --- timeline ---
+    if (started) {
+      // spark travelling to the first diya
+      if (spark) {
+        spark.t = clamp(t / TL.spread);
+        const e = easeOut(spark.t);
+        const sx = spark.x0 + (spark.x1 - spark.x0) * e;
+        const sy = spark.y0 + (spark.y1 - spark.y0) * e - Math.sin(e * Math.PI) * 60;
+        spark.x = sx; spark.y = sy;
+        parts.push(mkPart(sx, sy, rand(-0.6, 0.6), rand(-0.6, 0.6), pick(['#ffcf5a', '#fff1b8']), 0.6, 0.03, 0.96));
+        if (spark.t >= 1) spark = null;
+      }
+      // light diyas outward from the centre
+      for (const d of diyas) {
+        const at = TL.spread + d.k * TL.step;
+        if (t >= at) {
+          d.lit = Math.min(1, d.lit + dt * 2.2);
+          if (!d.chimed) {
+            d.chimed = true;
+            bell(NOTES[Math.min(NOTES.length - 1, d.k * 2)], 0, 0.14);
+            for (let k = 0; k < 14; k++) {
+              const a = rand(-Math.PI, 0);
+              parts.push(mkPart(d.x + 50 * d.s, d.y - 26 * d.s, Math.cos(a) * rand(1, 2.5), Math.sin(a) * rand(1, 2.5), '#ffcf5a', 0.7, 0.05, 0.96));
+            }
+          }
+        }
+      }
+      const litFrac = diyas.reduce((s, d) => s + d.lit, 0) / diyas.length;
+      warmth += ((litFrac * 0.55) - warmth) * Math.min(1, dt * 1.5);
+
+      const rT = t - rangoliStart();
+      if (rT > 0 && rT < dt * 1.5) { [0, 2, 4, 5, 6].forEach((n, i) => bell(NOTES[n] / 2, i * 0.22, 0.09)); }
+
+      // lanterns
+      if (t > rangoliStart() + 0.8 && now > nextLantern && lanterns.length < (small ? 8 : 14) && !reduceMotion) {
+        spawnLantern(); nextLantern = now + rand(0.6, 1.5);
+      }
+      // greeting
+      if (!greetShown && t > rangoliStart() + 1.6) { greetShown = true; $('greeting').classList.add('show'); }
+      // fireworks
+      if (t > rangoliStart() + 2.2 && now > nextRocket && rockets.length < 3) {
+        const first = nextRocket === 0;
+        launch(rand(W * 0.15, W * 0.85), rand(H * 0.12, H * 0.38), first ? 'diya' : undefined);
+        nextRocket = now + rand(reduceMotion ? 2.5 : 0.9, reduceMotion ? 4 : 2.1);
+      }
+      if (!actionsShown && t > rangoliStart() + 4.6) { actionsShown = true; $('actions').classList.add('show'); }
+    }
+
+    // --- update ---
+    for (let i = lanterns.length - 1; i >= 0; i--) {
+      const l = lanterns[i];
+      l.y -= l.v * f;
+      if (l.y < -60) lanterns.splice(i, 1);
+    }
+    updateFX(dt, f);
+
+    // --- draw ---
+    drawSky(time);
+    // far lanterns (smaller) behind the rangoli
+    for (const l of lanterns) if (l.s < 0.8) drawLantern(l, time);
+    drawRangoli(started ? t - rangoliStart() : 0, time);
+    drawFX();
+    for (const l of lanterns) if (l.s >= 0.8) drawLantern(l, time);
+    for (const d of diyas) drawDiya(d, time);
+    if (spark) {
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, 22);
+      g.addColorStop(0, 'rgba(255,255,230,1)'); g.addColorStop(1, 'rgba(255,190,80,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(spark.x, spark.y, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* ================= input ================= */
+  cvs.addEventListener('pointerdown', e => {
+    if (!started) { start(e.clientX, e.clientY); return; }
+    if (now - T0 > TL.spread) {
+      launch(e.clientX, Math.min(e.clientY, H * 0.7), pick(SHAPES));
+    }
+  });
+  addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && !started && !$('modal').classList.contains('open')) {
+      start(W / 2, H * 0.3);
+    }
+  });
+
+  $('sound').addEventListener('click', () => {
+    muted = !muted;
+    $('sound').textContent = muted ? '🔇' : '🔊';
+  });
+  $('replayBtn').addEventListener('click', reset);
+
+  /* ================= sharing ================= */
+  const base = () => location.origin + location.pathname;
+  function buildLink() {
+    const q = new URLSearchParams();
+    const from = clean($('fFrom').value, 40), to = clean($('fTo').value, 40), msg = clean($('fMsg').value, 160);
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    if (msg) q.set('msg', msg);
+    const qs = q.toString();
+    return { url: base() + (qs ? '?' + qs : ''), from, to };
+  }
+  function shareText(url, from, to) {
+    const who = from ? `${from} has` : 'Someone has';
+    const hi = to ? `Hey ${to}! ` : '';
+    return `🪔✨ ${hi}${who} lit a diya for you this Diwali.\nTap to open your surprise 👇\n${url}`;
+  }
+  function openWhatsApp(text) {
+    // wa.me opens the WhatsApp app on phones and WhatsApp Web on desktop
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+  }
+
+  // "Send to someone": forward the same greeting (keeps the sender's names/wish)
+  $('shareBtn').addEventListener('click', () => {
+    const url = location.href;
+    const text = shareText(url, P.from, '');
+    openWhatsApp(text);
+  });
+
+  const modal = $('modal');
+  $('createBtn').addEventListener('click', () => { modal.classList.add('open'); $('fFrom').focus(); });
+  $('closeBtn').addEventListener('click', () => modal.classList.remove('open'));
+  modal.addEventListener('pointerdown', e => { if (e.target === modal) modal.classList.remove('open'); });
+
+  $('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const { url, from, to } = buildLink();
+    const text = shareText(url, from, to);
+    openWhatsApp(text);
+  });
+  $('copyBtn').addEventListener('click', async () => {
+    const { url } = buildLink();
+    try { await navigator.clipboard.writeText(url); $('copied').textContent = 'Link copied ✓'; }
+    catch (err) { prompt('Copy this link:', url); }
+    setTimeout(() => { $('copied').textContent = ''; }, 2500);
+  });
+  $('previewBtn').addEventListener('click', () => { location.href = buildLink().url; });
+})();
+</script>
+</body>
+</html>
