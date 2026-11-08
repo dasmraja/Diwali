@@ -388,6 +388,7 @@
 
   function sndLaunch(x, dur) {
     if (!audio()) return;
+    if (playClip('launch', AC.currentTime, x, { vol: 0.8, rate: rand(0.94, 1.08), fadeAt: dur + 0.05, wet: 0.2 })) return;
     const t = AC.currentTime, out = sfxOut(x, 0.25);
     // the "fsssss" of the fuse and the rocket climbing
     const n = noiseSrc(t, dur + 0.1), bp = AC.createBiquadFilter(), g = AC.createGain();
@@ -415,8 +416,17 @@
     const far = clamp(1 - y / H);                     // higher bursts sound further away
     const t = AC.currentTime + 0.03 + far * 0.16;     // light arrives before sound
     const vol = 1 - far * 0.35;
-    const out = sfxOut(x, 0.45 + far * 0.4);
     const soft = shape === 'willow' ? 0.6 : 1;
+    if (fxBuf) {
+      // real recorded bursts: distance makes them quieter, later and duller
+      playClip('boom', t, x, { vol: vol * soft, rate: rand(0.9, 1.08), lowpass: far > 0.45 ? 5200 - far * 3000 : 0, wet: 0.3 + far * 0.4 });
+      if (shape === 'willow' || shape === 'double' || (shape === 'peony' && Math.random() < 0.5) || shape === 'crossette') {
+        playClip('crackle', t + rand(0.45, 0.8), x, { vol: 0.75 * vol, rate: rand(0.95, 1.1), wet: 0.35 });
+      }
+      if (shape === 'diya') [0, 4, 7, 12].forEach((s, i) => bell(hz(s + 12), (t - AC.currentTime) + 0.2 + i * 0.09, 0.05));
+      return;
+    }
+    const out = sfxOut(x, 0.45 + far * 0.4);
 
     // 1. deep thump you feel in your chest
     const o = AC.createOscillator(), og = AC.createGain();
@@ -610,7 +620,7 @@
     }
   }
 
-  function startMusic() {
+  function startSynthMusic() {
     if (!audio() || mTimer) return;
     const t = AC.currentTime + 0.1;
     mBeat = -4; mNextBeat = t;                  // one tanpura cycle alone, then everyone joins
@@ -634,6 +644,85 @@
     if (!AC) return;
     if (document.hidden) AC.suspend(); else AC.resume();
   });
+
+
+  /* ================= recorded audio =================
+     Real fireworks recordings (audio/fx.mp3, one file holding many short
+     clips) and a real classical performance (audio/music.mp3).
+     Sources and licences are listed in audio/CREDITS.md.
+     If a file can't load, the synthesised versions above are used. */
+  const FX = { launch: [], boom: [], crackle: [] };
+  let fxBuf = null, fxLoading = false, musicEl = null, musicGain = null, usingRecordedMusic = false;
+
+  function loadFx() {
+    if (fxBuf || fxLoading || !AC) return;
+    fxLoading = true;
+    fetch('audio/fx.mp3')
+      .then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status)))
+      .then(b => new Promise((res, rej) => AC.decodeAudioData(b, res, rej)))
+      .then(b => { fxBuf = b; })
+      .catch(() => { fxLoading = false; });
+  }
+
+  // play one clip from the fx file; returns false if it isn't loaded yet
+  function playClip(kind, t, x, { vol = 1, rate = 1, lowpass = 0, wet = 0.25, fadeAt = 0 } = {}) {
+    const list = FX[kind];
+    if (!fxBuf || !list || !list.length) return false;
+    const [off, dur] = pick(list);
+    const s = AC.createBufferSource(), g = AC.createGain();
+    s.buffer = fxBuf; s.playbackRate.value = rate;
+    let node = s;
+    if (lowpass) {
+      const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = lowpass;
+      node.connect(lp); node = lp;
+    }
+    g.gain.setValueAtTime(vol, t);
+    const len = dur / rate;
+    const end = fadeAt && fadeAt < len ? fadeAt : len;
+    g.gain.setValueAtTime(vol, t + Math.max(0, end - 0.12));
+    g.gain.linearRampToValueAtTime(0.0001, t + end);
+    node.connect(g).connect(sfxOut(x, wet));
+    s.start(t, off, dur);
+    s.stop(t + end + 0.05);
+    return true;
+  }
+
+  function startRecordedMusic() {
+    if (!AC || musicEl) return usingRecordedMusic;
+    musicEl = new Audio();
+    musicEl.src = 'audio/music.mp3';
+    musicEl.loop = true;
+    musicEl.preload = 'auto';
+    musicEl.setAttribute('playsinline', '');
+    try {
+      const src = AC.createMediaElementSource(musicEl);
+      musicGain = AC.createGain(); musicGain.gain.value = 0.0001;
+      src.connect(musicGain).connect(musicBus);
+    } catch (e) { musicEl = null; return false; }
+    usingRecordedMusic = true;
+    musicEl.addEventListener('error', () => {           // file missing: fall back to the synth
+      usingRecordedMusic = false; musicEl = null; startSynthMusic();
+    });
+    const p = musicEl.play();
+    if (p && p.catch) p.catch(() => {});
+    const t = AC.currentTime;
+    musicBus.gain.cancelScheduledValues(t);
+    musicBus.gain.setValueAtTime(musicOn ? 0.6 : 0.0001, t);
+    musicGain.gain.setValueAtTime(0.0001, t);
+    musicGain.gain.linearRampToValueAtTime(1, t + 3);   // gentle fade-in
+    return true;
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!musicEl) return;
+    if (document.hidden) musicEl.pause();
+    else if (started) { const p = musicEl.play(); if (p && p.catch) p.catch(() => {}); }
+  });
+
+  function startMusic() {
+    if (!audio()) return;
+    loadFx();
+    if (!startRecordedMusic()) startSynthMusic();
+  }
 
   /* ================= state / timeline ================= */
   let started = false, T0 = 0, now = 0, warmth = 0;
