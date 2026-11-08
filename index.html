@@ -115,7 +115,12 @@
     position: fixed; top: max(12px, env(safe-area-inset-top)); right: 12px;
     width: 40px; height: 40px; padding: 0; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .6s;
   }
-  #sound.show { opacity: .85; pointer-events: auto; }
+  #music {
+    position: fixed; top: max(12px, env(safe-area-inset-top)); right: 60px;
+    width: 40px; height: 40px; padding: 0; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .6s;
+  }
+  #sound.show, #music.show { opacity: .85; pointer-events: auto; }
+  #music.off { opacity: .4; text-decoration: line-through; }
 
   /* ---------- create modal ---------- */
   #modal {
@@ -150,7 +155,7 @@
 <div id="intro">
   <div class="sender" id="introSender">A Diwali surprise is waiting for you</div>
   <div class="cta">Tap the diya to light it</div>
-  <div class="hint">✨ turn your sound on</div>
+  <div class="hint">🎵 turn your sound on for music</div>
 </div>
 
 <div id="greeting" aria-live="polite">
@@ -160,6 +165,7 @@
   <div class="from" id="fromName"></div>
 </div>
 
+<button class="btn" id="music" aria-label="Background music" aria-pressed="true">🎵</button>
 <button class="btn" id="sound" aria-label="Toggle sound">🔊</button>
 
 <div id="actions">
@@ -276,43 +282,358 @@
     ['#7fd7ff', '#ffffff', '#ff9fc4'],
   ];
 
-  /* ================= audio (tiny synth, no files) ================= */
-  let AC = null, muted = false;
-  const NOTES = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66];
+  /* ================= audio engine (all synthesised, no files) ================= */
+  let AC = null, master, sfxBus, sfxVerb, musicBus, musicVerb, noiseBuf, crackleBuf;
+  let muted = false, musicOn = true;
+  const SA = 261.63;                                   // Sa = C4
+  const hz = semi => SA * Math.pow(2, semi / 12);
+  const NOTES = [0, 2, 4, 7, 9, 12, 14].map(hz);       // Bhupali: S R G P D S' R'
+
   function audio() {
-    if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
-    if (AC && AC.state === 'suspended') AC.resume();
+    if (!AC) {
+      try { AC = new (window.AudioContext || window.webkitAudioContext)(); setupAudio(); }
+      catch (e) { AC = null; return null; }
+    }
+    if (AC.state === 'suspended' && !document.hidden) AC.resume();
     return AC;
   }
-  function bell(freq, when = 0, vol = 0.18) {
-    if (muted || !audio()) return;
-    const t = AC.currentTime + when;
-    [1, 2.01, 3.02].forEach((m, i) => {
+
+  function makeIR(sec, decay) {
+    const len = Math.floor(AC.sampleRate * sec), b = AC.createBuffer(2, len, AC.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = b.getChannelData(c);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+    return b;
+  }
+  function makeVerb(ir, bus) {
+    const cv = AC.createConvolver(); cv.buffer = ir; cv.connect(bus); return cv;
+  }
+
+  function setupAudio() {
+    const comp = AC.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.knee.value = 10; comp.ratio.value = 5;
+    comp.attack.value = 0.002; comp.release.value = 0.3;
+    master = AC.createGain(); master.gain.value = muted ? 0 : 1;
+    master.connect(comp).connect(AC.destination);
+
+    sfxBus = AC.createGain(); sfxBus.gain.value = 0.9; sfxBus.connect(master);
+    musicBus = AC.createGain(); musicBus.gain.value = 0; musicBus.connect(master);
+    sfxVerb = makeVerb(makeIR(3.2, 2.6), sfxBus);       // open night sky echo
+    musicVerb = makeVerb(makeIR(2.4, 3.2), musicBus);   // temple-hall warmth
+
+    // shared white noise
+    noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+    // pre-rendered crackle: hundreds of tiny snaps thinning out over 2.2s
+    const len = Math.floor(AC.sampleRate * 2.2);
+    crackleBuf = AC.createBuffer(1, len, AC.sampleRate);
+    const cd = crackleBuf.getChannelData(0);
+    for (let k = 0; k < 420; k++) {
+      const pos = Math.floor(Math.pow(Math.random(), 1.6) * (len - 400));
+      const n = 20 + Math.floor(Math.random() * 160), amp = 0.25 + Math.random() * 0.75;
+      for (let i = 0; i < n; i++) cd[pos + i] += (Math.random() * 2 - 1) * amp * Math.pow(1 - i / n, 2);
+    }
+  }
+
+  // ---- small building blocks ----
+  function env(g, t, peak, attack, decay) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+  }
+  function noiseSrc(t, dur, rate = 1) {
+    const s = AC.createBufferSource(); s.buffer = noiseBuf; s.playbackRate.value = rate;
+    s.start(t, Math.random() * 1.5, dur); return s;
+  }
+  // output chain for a sound effect at screen x, with some reverb
+  function sfxOut(x, wet = 0.4) {
+    const g = AC.createGain();
+    let tail = g;
+    if (AC.createStereoPanner) {
+      const p = AC.createStereoPanner(); p.pan.value = clamp((x / W) * 2 - 1, -1, 1) * 0.75;
+      g.connect(p); tail = p;
+    }
+    tail.connect(sfxBus);
+    const w = AC.createGain(); w.gain.value = wet; tail.connect(w).connect(sfxVerb);
+    return g;
+  }
+  function musicOut(wet = 0.35) {
+    const g = AC.createGain();
+    g.connect(musicBus);
+    const w = AC.createGain(); w.gain.value = wet; g.connect(w).connect(musicVerb);
+    return g;
+  }
+
+  // ---- bells (diya lighting / rangoli chord) ----
+  function bell(freq, when = 0, vol = 0.18, out) {
+    if (!audio()) return;
+    const t = AC.currentTime + when, dest = out || sfxOut(W / 2, 0.6);
+    [[1, 1, 2.6], [2.76, 0.35, 1.4], [5.4, 0.15, 0.8], [8.93, 0.06, 0.5]].forEach(([m, a, d]) => {
       const o = AC.createOscillator(), g = AC.createGain();
-      o.type = 'sine'; o.frequency.value = freq * m;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(vol / (i * 2 + 1), t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2 / (i + 1));
-      o.connect(g).connect(AC.destination); o.start(t); o.stop(t + 2.5);
+      o.frequency.value = freq * m;
+      env(g, t, vol * a, 0.004, d);
+      o.connect(g).connect(dest); o.start(t); o.stop(t + d + 0.1);
     });
   }
-  function pop(vol = 0.25) {
-    if (muted || !audio()) return;
-    const t = AC.currentTime, len = 0.6;
-    const buf = AC.createBuffer(1, AC.sampleRate * len, AC.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
-    const src = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
-    src.buffer = buf; f.type = 'lowpass'; f.frequency.value = rand(700, 1600);
+
+  // ---- fireworks ----
+  function sndShimmer() {
+    if (!audio()) return;
+    const t = AC.currentTime, out = sfxOut(W / 2, 0.7);
+    for (let i = 0; i < 6; i++) bell(NOTES[i] * 2, i * 0.07, 0.05, out);
+  }
+
+  function sndLaunch(x, dur) {
+    if (!audio()) return;
+    const t = AC.currentTime, out = sfxOut(x, 0.25);
+    // the "fsssss" of the fuse and the rocket climbing
+    const n = noiseSrc(t, dur + 0.1), bp = AC.createBiquadFilter(), g = AC.createGain();
+    bp.type = 'bandpass'; bp.Q.value = 0.9;
+    bp.frequency.setValueAtTime(1200, t); bp.frequency.exponentialRampToValueAtTime(5200, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.11, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.01, t + dur);
+    n.connect(bp).connect(g).connect(out);
+    // about half the rockets whistle on the way up
+    if (Math.random() < 0.5) {
+      const o = AC.createOscillator(), og = AC.createGain(), lfo = AC.createOscillator(), lg = AC.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(rand(900, 1300), t);
+      o.frequency.exponentialRampToValueAtTime(rand(2400, 3200), t + dur);
+      lfo.frequency.value = 24; lg.gain.value = 40; lfo.connect(lg).connect(o.frequency);
+      og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.045, t + 0.15);
+      og.gain.setValueAtTime(0.045, t + dur * 0.8); og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(og).connect(out);
+      o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+    }
+  }
+
+  function sndBoom(x, y, shape) {
+    if (!audio()) return;
+    const far = clamp(1 - y / H);                     // higher bursts sound further away
+    const t = AC.currentTime + 0.03 + far * 0.16;     // light arrives before sound
+    const vol = 1 - far * 0.35;
+    const out = sfxOut(x, 0.45 + far * 0.4);
+    const soft = shape === 'willow' ? 0.6 : 1;
+
+    // 1. deep thump you feel in your chest
+    const o = AC.createOscillator(), og = AC.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(rand(110, 150), t);
+    o.frequency.exponentialRampToValueAtTime(32, t + 0.55);
+    env(og, t, 0.9 * vol * soft, 0.004, 0.9);
+    o.connect(og).connect(out); o.start(t); o.stop(t + 1);
+
+    // 2. the body of the blast: noise through a closing low-pass
+    const n = noiseSrc(t, 2), lp = AC.createBiquadFilter(), ng = AC.createGain();
+    lp.type = 'lowpass'; lp.Q.value = 0.5;
+    lp.frequency.setValueAtTime(4200 - far * 1800, t);
+    lp.frequency.exponentialRampToValueAtTime(180, t + 1.4);
+    env(ng, t, 0.75 * vol * soft, 0.003, 1.7);
+    n.connect(lp).connect(ng).connect(out);
+
+    // 3. sharp crack at the front
+    const c = noiseSrc(t, 0.08), hp = AC.createBiquadFilter(), cg = AC.createGain();
+    hp.type = 'highpass'; hp.frequency.value = 1800;
+    env(cg, t, 0.55 * vol * soft, 0.001, 0.07);
+    c.connect(hp).connect(cg).connect(out);
+
+    // 4. character per shell
+    if (shape === 'willow' || shape === 'peony' && Math.random() < 0.5 || shape === 'double') {
+      crackle(t + rand(0.35, 0.6), out, shape === 'willow' ? 0.32 : 0.42, shape === 'willow' ? 0.75 : 1);
+    }
+    if (shape === 'crossette') {
+      for (let i = 0; i < 6; i++) miniPop(t + rand(0.7, 1.05), out, vol);
+    }
+    if (shape === 'diya') {
+      // a soft temple-bell chord rings out with the diya-shaped burst
+      [0, 4, 7, 12].forEach((s, i) => bell(hz(s + 12), (t - AC.currentTime) + 0.15 + i * 0.09, 0.07, out));
+    }
+  }
+
+  function crackle(t, out, vol, rate) {
+    const s = AC.createBufferSource(), hp = AC.createBiquadFilter(), g = AC.createGain();
+    s.buffer = crackleBuf; s.playbackRate.value = rate * rand(0.85, 1.2);
+    hp.type = 'highpass'; hp.frequency.value = 1500;
     g.gain.value = vol;
-    src.connect(f).connect(g).connect(AC.destination); src.start(t);
+    s.connect(hp).connect(g).connect(out); s.start(t);
   }
-  function whoosh() {
-    if (muted || !audio()) return;
-    const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
-    o.type = 'triangle'; o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(1400, t + 0.7);
-    g.gain.setValueAtTime(0.025, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
-    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + 0.85);
+  function miniPop(t, out, vol) {
+    const n = noiseSrc(t, 0.12), bp = AC.createBiquadFilter(), g = AC.createGain();
+    bp.type = 'bandpass'; bp.frequency.value = rand(900, 1800); bp.Q.value = 1.2;
+    env(g, t, 0.35 * vol, 0.002, 0.12);
+    n.connect(bp).connect(g).connect(out);
   }
+
+  /* ================= background music =================
+     An original bhajan-style instrumental in Raag Bhupali (S R G P D),
+     with tanpura drone, bansuri flute, tabla in Keherwa taal (8 beats),
+     manjira cymbals and a temple bell at the start of each cycle. */
+  const BPM = 74, BEAT = 60 / BPM;
+  const Sa = 0, Re = 2, Ga = 4, Pa = 7, Dha = 9, Sa2 = 12, Re2 = 14, Ga2 = 16, lDha = -3, lPa = -5, REST = null;
+  const MELODY = [
+    // sthayi
+    [Ga, 1], [Pa, 1], [Dha, 2], [Pa, 1], [Ga, 1], [Re, 2],
+    [Sa, 1], [Re, 1], [Ga, 1], [Pa, 1], [Ga, 2], [Re, 1], [Sa, 1],
+    [lDha, 1], [Sa, 1], [Re, 1], [Ga, 1], [Re, 1], [Ga, 1], [Pa, 2],
+    [Ga, 1], [Re, 1], [Sa, 4], [REST, 2],
+    // antara
+    [Pa, 1], [Dha, 1], [Sa2, 2], [Dha, 1], [Sa2, 1], [Re2, 2],
+    [Ga2, 1], [Re2, 1], [Sa2, 2], [Dha, 1], [Pa, 1], [Dha, 2],
+    [Pa, 1], [Ga, 1], [Re, 1], [Ga, 1], [Pa, 2], [Ga, 1], [Re, 1],
+    [Sa, 1], [lDha, 1], [Sa, 4], [REST, 2],
+  ];
+  const TANPURA = [lPa, Sa, Sa, Sa - 12];
+  const KEHERWA = ['dha', 'ge', 'na', 'ti', 'na', 'ka', 'dhi', 'na'];
+  let mTimer = null, mBeat = 0, mNextBeat = 0, melIdx = 0, melNext = 0, prevSemi = null;
+
+  function tanpura(t, semi) {
+    const f = hz(semi), out = musicOut(0.4), lp = AC.createBiquadFilter(), g = AC.createGain();
+    lp.type = 'lowpass'; lp.Q.value = 2;
+    lp.frequency.setValueAtTime(3200, t); lp.frequency.exponentialRampToValueAtTime(700, t + 3);
+    env(g, t, 0.045, 0.03, 3.6);
+    [1, 1.004, 0.996].forEach(m => {
+      const o = AC.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f * m;
+      o.connect(lp); o.start(t); o.stop(t + 3.8);
+    });
+    lp.connect(g).connect(out);
+  }
+
+  function flute(t, semi, dur, prev) {
+    const f = hz(semi + 12), out = musicOut(0.5);
+    const o = AC.createOscillator(), o2 = AC.createOscillator(), g = AC.createGain(), g2 = AC.createGain();
+    o.type = 'sine'; o2.type = 'sine';
+    if (prev !== null && prev !== undefined) {
+      // meend: glide in from the previous note, like a bansuri player would
+      o.frequency.setValueAtTime(hz(prev + 12), t);
+      o.frequency.setTargetAtTime(f, t, 0.045);
+    } else o.frequency.setValueAtTime(f, t);
+    o2.frequency.value = f * 2; g2.gain.value = 0.12;
+    const lfo = AC.createOscillator(), lg = AC.createGain();
+    lfo.frequency.value = 5.2;
+    lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * 0.009, t + Math.min(0.6, dur * 0.6));
+    lfo.connect(lg).connect(o.frequency);
+    const end = t + dur;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.085, t + 0.07);
+    g.gain.setValueAtTime(0.075, Math.max(t + 0.08, end - 0.12));
+    g.gain.exponentialRampToValueAtTime(0.0001, end + 0.12);
+    o.connect(g); o2.connect(g2).connect(g); g.connect(out);
+    // breath
+    const n = noiseSrc(t, dur + 0.2), bp = AC.createBiquadFilter(), ng = AC.createGain();
+    bp.type = 'bandpass'; bp.frequency.value = f * 1.6; bp.Q.value = 3;
+    ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.035, t + 0.04);
+    ng.gain.exponentialRampToValueAtTime(0.008, t + 0.25); ng.gain.exponentialRampToValueAtTime(0.0001, end + 0.1);
+    n.connect(bp).connect(ng).connect(out);
+    [o, o2, lfo].forEach(x => { x.start(t); x.stop(end + 0.2); });
+  }
+
+  function tablaStroke(t, kind, vol = 1) {
+    const out = musicOut(0.2);
+    const bayan = () => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.frequency.setValueAtTime(88, t);
+      o.frequency.linearRampToValueAtTime(112, t + 0.12);
+      o.frequency.exponentialRampToValueAtTime(80, t + 0.6);
+      env(g, t, 0.32 * vol, 0.004, 0.65);
+      o.connect(g).connect(out); o.start(t); o.stop(t + 0.7);
+    };
+    const dayan = (ring = 0.38, v = 0.13) => {
+      [[1, 1], [2, 0.45], [3, 0.22], [4, 0.1]].forEach(([m, a]) => {
+        const o = AC.createOscillator(), g = AC.createGain();
+        o.frequency.value = SA * 2 * m;
+        env(g, t, v * a * vol, 0.002, ring / m + 0.05);
+        o.connect(g).connect(out); o.start(t); o.stop(t + ring + 0.1);
+      });
+      const n = noiseSrc(t, 0.02), hp = AC.createBiquadFilter(), ng = AC.createGain();
+      hp.type = 'highpass'; hp.frequency.value = 3000;
+      env(ng, t, 0.08 * vol, 0.001, 0.02);
+      n.connect(hp).connect(ng).connect(out);
+    };
+    const ti = () => {
+      const n = noiseSrc(t, 0.05), bp = AC.createBiquadFilter(), g = AC.createGain();
+      bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 2;
+      env(g, t, 0.14 * vol, 0.001, 0.05);
+      n.connect(bp).connect(g).connect(out);
+      dayan(0.07, 0.06);
+    };
+    const ka = () => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.frequency.value = 140;
+      env(g, t, 0.2 * vol, 0.002, 0.07);
+      o.connect(g).connect(out); o.start(t); o.stop(t + 0.1);
+    };
+    if (kind === 'dha') { bayan(); dayan(); }
+    else if (kind === 'dhi') { bayan(); dayan(0.2, 0.1); }
+    else if (kind === 'ge') bayan();
+    else if (kind === 'na') dayan();
+    else if (kind === 'ti') ti();
+    else if (kind === 'ka') ka();
+  }
+
+  function manjira(t, vol) {
+    const out = musicOut(0.5);
+    [3150, 4420, 5870].forEach((f, i) => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.frequency.value = f;
+      env(g, t, 0.018 * vol / (i + 1), 0.002, 1.1 * vol);
+      o.connect(g).connect(out); o.start(t); o.stop(t + 1.3);
+    });
+    const n = noiseSrc(t, 0.06), hp = AC.createBiquadFilter(), g = AC.createGain();
+    hp.type = 'highpass'; hp.frequency.value = 6000;
+    env(g, t, 0.05 * vol, 0.001, 0.06);
+    n.connect(hp).connect(g).connect(out);
+  }
+
+  function beatAt(t, i) {
+    tanpura(t, TANPURA[((i % 4) + 4) % 4]);
+    if (i === -4 || (i >= 0 && i % 64 === 0)) bell(hz(-12) * 2, t - AC.currentTime, 0.07, musicOut(0.7));
+    if (i < 0) return;
+    const b = i % 8, bar = Math.floor(i / 8);
+    let stroke = KEHERWA[b];
+    tablaStroke(t, stroke, b === 0 ? 1.1 : 0.85);
+    // a little "tirakita" fill at the end of every 4th bar
+    if (bar % 4 === 3 && b >= 6) tablaStroke(t + BEAT / 2, b === 7 ? 'ti' : 'na', 0.6);
+    if (b === 0) manjira(t, 1); else if (b === 4) manjira(t, 0.45);
+  }
+
+  function scheduleMusic() {
+    if (!AC || AC.state !== 'running') return;
+    const ahead = AC.currentTime + 0.3;
+    while (mNextBeat < ahead) { beatAt(mNextBeat, mBeat); mNextBeat += BEAT; mBeat++; }
+    while (melNext < ahead) {
+      const [s, b] = MELODY[melIdx % MELODY.length], dur = b * BEAT;
+      if (s !== REST) flute(melNext, s, dur, prevSemi);
+      prevSemi = s; melNext += dur; melIdx++;
+    }
+  }
+
+  function startMusic() {
+    if (!audio() || mTimer) return;
+    const t = AC.currentTime + 0.1;
+    mBeat = -4; mNextBeat = t;                  // one tanpura cycle alone, then everyone joins
+    melIdx = 0; prevSemi = null; melNext = t + 4 * BEAT;
+    musicBus.gain.cancelScheduledValues(t);
+    musicBus.gain.setValueAtTime(0.0001, t);
+    musicBus.gain.linearRampToValueAtTime(musicOn ? 0.6 : 0.0001, t + 2.5);
+    mTimer = setInterval(scheduleMusic, 60);
+    scheduleMusic();
+  }
+
+  function setMuted(m) {
+    muted = m;
+    if (AC) master.gain.setTargetAtTime(m ? 0 : 1, AC.currentTime, 0.08);
+  }
+  function setMusic(on) {
+    musicOn = on;
+    if (AC) musicBus.gain.setTargetAtTime(on ? 0.6 : 0.0001, AC.currentTime, 0.25);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!AC) return;
+    if (document.hidden) AC.suspend(); else AC.resume();
+  });
 
   /* ================= state / timeline ================= */
   let started = false, T0 = 0, now = 0, warmth = 0;
@@ -327,10 +648,11 @@
     started = true; T0 = now;
     $('intro').classList.add('gone');
     $('sound').classList.add('show');
-    audio();
+    $('music').classList.add('show');
+    audio(); startMusic();
     const d0 = diyas[(diyas.length - 1) / 2];
     spark = { x0: x, y0: y, x1: d0.x, y1: d0.y - 26 * d0.s, t: 0 };
-    whoosh();
+    sndShimmer();
   }
 
   function reset() {
@@ -616,17 +938,18 @@
   const SHAPES = ['peony', 'ring', 'willow', 'double', 'crossette', 'diya'];
   function launch(tx, ty, shape) {
     const x = tx + rand(-40, 40);
+    const vy = -Math.sqrt(2 * 0.12 * Math.max(10, H * 0.95 - ty));
     rockets.push({
       x, y: H * 0.95, px: x, py: H * 0.95, tx, ty,
-      vy: -Math.sqrt(2 * 0.12 * (H * 0.95 - ty)), vx: (tx - x) / 60,
+      vy, vx: (tx - x) / 60,
       shape: shape || pick(SHAPES), pal: pick(PALETTES),
     });
-    whoosh();
+    sndLaunch(x, Math.max(0.3, (-vy - 0.4) / 0.12 / 60));
   }
   function explode(r) {
     const { x, y, pal, shape } = r;
     const cap = small ? 0.65 : 1;
-    pop(0.18 + Math.random() * 0.1);
+    sndBoom(x, y, shape);
     // flash
     parts.push(mkPart(x, y, 0, 0, '#fff', 0.25, 0, 1, 2));
     if (shape === 'ring' || shape === 'double') {
@@ -828,8 +1151,15 @@
   });
 
   $('sound').addEventListener('click', () => {
-    muted = !muted;
+    setMuted(!muted);
     $('sound').textContent = muted ? '🔇' : '🔊';
+    $('music').style.display = muted ? 'none' : '';
+  });
+  $('music').addEventListener('click', () => {
+    audio(); startMusic();
+    setMusic(!musicOn);
+    $('music').classList.toggle('off', !musicOn);
+    $('music').setAttribute('aria-pressed', String(musicOn));
   });
   $('replayBtn').addEventListener('click', reset);
 
