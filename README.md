@@ -20,7 +20,7 @@ Everything is drawn on a canvas and the sound is made in the browser, so there a
 | `to`      | `to=Rohan` | "Happy Diwali, Rohan" |
 | `msg`     | `msg=Wishing%20you%20light…` | replaces the default wish (max 160 chars) |
 
-Example: `https://dasmraja.github.io/diwali/?from=Priya&to=Rohan`
+Example: `https://dasmraja.github.io/Diwali/?from=Priya&to=Rohan`
 
 The **Personalise** button builds this link for you and opens WhatsApp with a ready-made message (on phones it opens the app; on desktop it opens WhatsApp Web).
 
@@ -30,7 +30,7 @@ WhatsApp needs a public `https://` link, so the page has to be hosted:
 
 1. On GitHub, go to **Settings → Pages**.
 2. Under **Source**, choose **Deploy from a branch**, then pick the branch and the `/ (root)` folder.
-3. The greeting will be live at `https://dasmraja.github.io/diwali/`.
+3. The greeting will be live at `https://dasmraja.github.io/Diwali/`.
 
 `og-image.png` is the preview card WhatsApp shows with the link. Its URL in `index.html` (`og:image`) assumes the GitHub Pages address above, so change it if you host somewhere else.
 
